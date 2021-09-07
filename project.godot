@@ -10,9 +10,24 @@ config_version=4
 
 _global_script_classes=[ {
 "base": "Node",
+"class": "Ast",
+"language": "GDScript",
+"path": "res://src/ast.gd"
+}, {
+"base": "",
+"class": "AstPrinter",
+"language": "GDScript",
+"path": "res://ast_printer.gd"
+}, {
+"base": "Node",
 "class": "Lexer",
 "language": "GDScript",
 "path": "res://src/lexer.gd"
+}, {
+"base": "Node",
+"class": "Parser",
+"language": "GDScript",
+"path": "res://parser.gd"
 }, {
 "base": "Node",
 "class": "Token",
@@ -20,7 +35,10 @@ _global_script_classes=[ {
 "path": "res://src/token.gd"
 } ]
 _global_script_class_icons={
+"Ast": "",
+"AstPrinter": "",
 "Lexer": "",
+"Parser": "",
 "Token": ""
 }
 

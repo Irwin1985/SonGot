@@ -154,6 +154,7 @@ func _get_string() -> String:
 	while true:
 		if _ch == EOF or _ch == '"':
 			break
+		_advance()
 	
 	return _input.substr(_position, _pos-_position)
 
