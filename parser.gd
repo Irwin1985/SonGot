@@ -2,6 +2,17 @@ extends Node
 
 class_name Parser
 
+# precedence order
+
+const LOWEST = 1
+const EQUALITY = 2
+const COMPARISON = 3
+const TERM = 4
+const FACTOR = 5
+const PREFIX = 6
+const CALL = 7
+
+
 var curToken: Token
 var peekToken: Token
 var lastToken: Token
@@ -9,24 +20,9 @@ var _errors: Array = []
 var l: Lexer
 
 
-# precedence order
-enum {
-	LOWEST = 1,
-	LOGIC_OR = 2,
-	LOGIC_AND = 3,
-	EQUALITY = 4,
-	COMPARISON = 5,
-	TERM = 6,
-	FACTOR = 7,
-	PREFIX = 8,
-	CALL = 9,
-	INDEX = 10,
-}
 
 # token precedence
 var _token_precedence: Dictionary = {
-	TokenType.OR: LOGIC_OR,
-	TokenType.AND: LOGIC_AND,
 	TokenType.EQ: EQUALITY,
 	TokenType.NEQ: EQUALITY,
 	TokenType.LT: COMPARISON,
@@ -40,7 +36,6 @@ var _token_precedence: Dictionary = {
 	TokenType.MINUS: PREFIX,
 	TokenType.BANG: PREFIX,
 	TokenType.LPAREN: CALL,
-	TokenType.LBRACKET: INDEX,
 }
 
 
@@ -53,7 +48,8 @@ func _init(l: Lexer) -> void:
 # ----------------------------------------------- #
 # Parsing functions
 # ----------------------------------------------- #
-func parse() -> Array:
+func parse() -> Ast.Program:
+	var program := Ast.Program.new()
 	var _stmts: Array = []
 
 	while !_cur_token_is(TokenType.EOF):
@@ -62,13 +58,12 @@ func parse() -> Array:
 		if s != null:
 			_stmts.append(s)
 
-		if _cur_token_is(TokenType.SEMICOLON):
-			_advance()
+		_advance()
+	program.statements = _stmts
+	return program
 
-	return _stmts
 
-
-func _parse_stmt() -> Ast.Stmt:
+func _parse_stmt() -> Ast.AstNode:
 	match curToken.Type:
 		TokenType.LET:
 			return _parse_let_stmt()
@@ -78,69 +73,176 @@ func _parse_stmt() -> Ast.Stmt:
 			return _parse_expression_stmt()
 
 
-func _parse_let_stmt() -> Ast.Stmt:
+func _parse_let_stmt() -> Ast.AstNode:
 	return null
 
 
-func _parse_return_stmt() -> Ast.Stmt:
+func _parse_return_stmt() -> Ast.AstNode:
 	return null
 
 
-func _parse_expression_stmt() -> Ast.Stmt:
+func _parse_expression_stmt() -> Ast.AstNode:
 	var _stmt: = Ast.ExpressionStmt.new()
 
-	var _exp: = _parse_expression(LOWEST)
+#	var _exp: = _parse_expression(LOWEST)
+	var _exp: = expression()
 	if _exp == null:
 		return null
 	_stmt.expression = _exp
 
+	if _peek_token_is(TokenType.SEMICOLON):
+		_advance()
+
 	return _stmt
 
 
-func _parse_expression(precedence: int) -> Ast.Expr:
+func expression() -> Ast.AstExpression:
+	return logicOr()
+
+
+func logicOr() -> Ast.AstExpression:
+	var node = logicAnd()
+	while curToken.Type == TokenType.OR:
+		var ope = curToken
+		_advance()
+		var binaryNode := Ast.BinaryExpr.new()
+		binaryNode.left = node
+		binaryNode.operator = ope.Literal
+		binaryNode.right = logicAnd()
+		node = binaryNode
+	
+	return node
+
+
+func logicAnd() -> Ast.AstExpression:
+	var node = equality()
+	while curToken.Type == TokenType.AND:
+		var ope = curToken
+		_advance()
+		var binaryNode := Ast.BinaryExpr.new()
+		binaryNode.left = node
+		binaryNode.operator = ope.Literal
+		binaryNode.right = equality()
+		node = binaryNode
+
+	return node
+
+
+func equality() -> Ast.AstExpression:
+	var node = comparison()
+	while curToken.Type in [TokenType.EQ, TokenType.NEQ]:
+		var ope = curToken
+		_advance()
+		var binaryNode := Ast.BinaryExpr.new()
+		binaryNode.left = node
+		binaryNode.operator = ope.Literal
+		binaryNode.right = comparison()
+		node = binaryNode
+
+	return node
+
+
+func comparison() -> Ast.AstExpression:
+	var node = term()
+	while curToken.Type in [TokenType.PLUS, TokenType.MINUS]:
+		var ope = curToken
+		_advance()
+		var binaryNode := Ast.BinaryExpr.new()
+		binaryNode.left = node
+		binaryNode.operator = ope.Literal
+		binaryNode.right = term()
+		node = binaryNode
+
+	return node
+
+
+func term() -> Ast.AstExpression:
+	var node = factor()
+	while curToken.Type in [TokenType.PLUS, TokenType.MINUS]:
+		var ope = curToken
+		_advance()
+		var binaryNode := Ast.BinaryExpr.new()
+		binaryNode.left = node
+		binaryNode.operator = ope.Literal
+		binaryNode.right = factor()
+		node = binaryNode
+
+	return node
+
+
+func factor() -> Ast.AstExpression:
+	var node = primary()
+	while curToken.Type in [TokenType.MUL, TokenType.DIV]:
+		var ope = curToken
+		_advance()
+		var binaryNode := Ast.BinaryExpr.new()
+		binaryNode.left = node
+		binaryNode.operator = ope.Literal
+		binaryNode.right = primary()
+		node = binaryNode
+
+	return node
+
+
+func primary() -> Ast.AstExpression:
+	var literal
+	if curToken.Type == TokenType.NUMBER:
+		literal = Ast.LiteralExpr.new()
+		literal.value = curToken
+		_advance()
+		return literal
+	return null
+
+
+func _parse_expression(precedence: int) -> Ast.AstExpression:
 	var _left_expr = _prefix_fn()
 	if _left_expr == null:
 		_new_error("no parsing function for token: " + curToken._to_string())
 		return null
 
-	while !_is_at_end() and precedence < _cur_precedence():
-		_left_expr = _infix_fn(_left_expr)
+	while precedence < _peek_precedence():
+		if _infix_fn():
+			_advance()
+			_left_expr = _parse_infix_expr(_left_expr)
+		else:
+			return _left_expr
 
 	return _left_expr
 
 
-func _prefix_fn() -> Ast.Expr:
+func _prefix_fn() -> Ast.AstExpression:
 	match curToken.Type:
 		TokenType.IDENT, \
 		TokenType.NUMBER, \
 		TokenType.STRING, \
-		TokenType.NULL, \
+		TokenType.BANG, \
+		TokenType.MINUS, \
 		TokenType.TRUE, \
-		TokenType.FALSE:
+		TokenType.FALSE, \
+		TokenType.NULL:
 			return _parse_literal()
 		_:
 			return null
 
 
-func _infix_fn(left: Ast.Expr) -> Ast.Expr:
-	match curToken.Type:
+func _infix_fn() -> bool:
+	match peekToken.Type:
 		TokenType.PLUS, \
 		TokenType.MINUS, \
 		TokenType.MUL, \
 		TokenType.DIV:
-			return _parse_infix_expr(left)
+			return true
 		_:
-			return left
+			return false
 
 
-func _parse_literal() -> Ast.Expr:
+func _parse_literal() -> Ast.AstExpression:
 	var _exp: = Ast.LiteralExpr.new()
 	_exp.value = curToken
-	_advance()
 	return _exp
 
 
-func _parse_infix_expr(left: Ast.Expr) -> Ast.Expr:
+func _parse_infix_expr(left: Ast.AstExpression) -> Ast.AstExpression:
 	var _exp: = Ast.BinaryExpr.new()
 	_exp.token = curToken
 	_exp.left = left
@@ -170,8 +272,18 @@ func _cur_precedence() -> int:
 	return LOWEST
 
 
+func _peek_precedence() -> int:
+	if _token_precedence.has(peekToken.Type):
+		return _token_precedence[peekToken.Type]
+	return LOWEST
+
+
 func _cur_token_is(t: int) -> bool:
 	return curToken.Type == t
+
+
+func _peek_token_is(t: int) -> bool:
+	return peekToken.Type == t
 
 
 func _new_error(msg: String) -> void:

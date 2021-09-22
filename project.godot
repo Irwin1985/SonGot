@@ -9,8 +9,13 @@
 config_version=4
 
 _global_script_classes=[ {
-"base": "Node",
+"base": "Reference",
 "class": "Ast",
+"language": "GDScript",
+"path": "res://ast_nodes.gd"
+}, {
+"base": "Node",
+"class": "Ast2",
 "language": "GDScript",
 "path": "res://src/ast.gd"
 }, {
@@ -36,6 +41,7 @@ _global_script_classes=[ {
 } ]
 _global_script_class_icons={
 "Ast": "",
+"Ast2": "",
 "AstPrinter": "",
 "Lexer": "",
 "Parser": "",

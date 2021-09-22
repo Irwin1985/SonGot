@@ -1,6 +1,6 @@
 extends Node
 
-class_name Ast
+class_name Ast2
 
 class Visitor:
 	func VisitExpressionStmt(e: ExpressionStmt):

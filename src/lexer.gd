@@ -140,11 +140,12 @@ func _peek_char() -> String:
 
 
 func _get_number() -> String:
-	var _position: int = _pos
+	var lexeme := ''
 	while _ch != EOF and _is_digit(_ch):
+		lexeme += _ch
 		_advance()
 	
-	return _input.substr(_position, _pos-_position)
+	return lexeme
 
 
 func _get_string() -> String:
